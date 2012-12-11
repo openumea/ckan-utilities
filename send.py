@@ -7,10 +7,10 @@ This code is written by Anton Lundin <anton@dohi.se>
 for the OpenUmea project, http://www.openumea.se/.
 """
 
+# To communicate with ckan
 API_URL = "http://openumea.se/api"
 API_KEY = "XXXXXXXX-YYYY-ZZZZ-XXXXXXXXXXXXXXXXX"
 DATASET = "dataset"
-FORMAT_OVERRRIDE = "xml"
 
 import urllib2
 import sys
@@ -98,6 +98,15 @@ def get_content_type(filename):
 
 
 def upload_file(filename):
+    """ Grab name and content from the filesystem """
+    upload_file_content(os.path.basename(filename),
+                        open(filename, 'rb').read(),
+                        get_content_type(filename))
+
+
+def upload_file_content(file_name, file_content,
+                        mimetype='application/octet-stream',
+                        fileformat=None):
     """
     Construct a uniq filename to upload as.
     Fetch auth data to upload that file
@@ -106,7 +115,7 @@ def upload_file(filename):
     And register the file in ckan as a resource.
     """
     upload_filename = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S") +\
-        "/" + os.path.basename(filename)
+        "/" + file_name
     auth_data = get_storage_auth_form(upload_filename)
 
     # Convert EVERYTHING to str, so we can keep file-content as str.
@@ -116,7 +125,7 @@ def upload_file(filename):
     post_multipart(
         str(auth_data['action']),
         [(str(kv['name']), str(kv['value'])) for kv in auth_data['fields']],
-        [("file", upload_filename, open(filename, 'rb').read())])
+        [("file", str(upload_filename), file_content)])
 
     file_metadata = get_storage_metadata(upload_filename)
 
@@ -126,13 +135,20 @@ def upload_file(filename):
     resource["size"] = file_metadata["_content_length"]
     resource["url"] = file_metadata["_location"]
     resource["hash"] = file_metadata["_checksum"]
-    resource["format"] = FORMAT_OVERRRIDE
-    resource["mimetype"] = get_content_type(filename)
+    resource["mimetype"] = mimetype
+    if fileformat:
+        resource["format"] = fileformat
     resource["resource_type"] = "file.upload"
 
     register_resource(resource)
 
 if __name__ == '__main__':
+    # should we send stdin?
+    if len(sys.argv) == 2 and sys.argv[1] == "-":
+        upload_file_content("stdin", sys.stdin.read())
+        sys.exit(0)
+
+    # or should we upload files?
     for arg in sys.argv[1:]:
         if os.path.isfile(arg):
             upload_file(arg)
